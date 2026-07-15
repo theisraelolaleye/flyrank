@@ -71,12 +71,72 @@ app.post("/tasks", (req, res) => {
 	};
 
 	tasks.push(newTask);
-	
+
 	res.status(201).json(newTask);
 
 	// console.log();
-
 });
+
+app.put("/tasks/:id", (req, res) => {
+	const id = Number(req.params.id);
+
+	const index = tasks.findIndex((task) => task.id === id);
+
+	if (index === -1) {
+		return res.status(404).json({
+			error: `Task ${id} not found`,
+		});
+	}
+
+	const { title, done } = req.body;
+
+	if (title === undefined && done === undefined) {
+		return res.status(400).json({
+			error: "Provide title and/or done",
+		});
+	}
+
+	if (title !== undefined && title.trim() === "") {
+		return res.status(400).json({
+			error: "Title cannot be empty",
+		});
+	}
+
+	if (done !== undefined && typeof done !== "boolean") {
+		return res.status(400).json({
+			error: "Done must be true or false",
+		});
+	}
+
+	if (title !== undefined) {
+		tasks[index].title = title;
+	}
+
+	if (done !== undefined) {
+		tasks[index].done = done;
+	}
+
+	res.json(tasks[index]);
+});
+
+
+
+app.delete("/tasks/:id", (req, res) => {
+	const id = Number(req.params.id);
+
+	const index = tasks.findIndex((task) => task.id === id);
+
+	if (index === -1) {
+		return res.status(404).json({
+			error: `Task ${id} not found`,
+		});
+	}
+
+	tasks.splice(index, 1);
+
+	res.sendStatus(204);
+});
+
 
 app.listen(port, () => {
 	console.log(`Example app listening on port ${port}`);
