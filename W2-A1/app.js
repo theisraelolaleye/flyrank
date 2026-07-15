@@ -1,4 +1,9 @@
 import express from "express";
+const app = express();
+const port = 3000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const tasks = [
 	{
@@ -17,10 +22,6 @@ const tasks = [
 		done: false,
 	},
 ];
-
-const app = express();
-
-const port = 3000;
 
 app.get("/", (req, res) => {
 	res.json({
@@ -52,6 +53,29 @@ app.get("/task/:id", (req, res) => {
 
 	res.json(task);
 	// console.log(req.params);
+});
+
+app.post("/tasks", (req, res) => {
+	const nextID = tasks.length + 1;
+	const { title } = req.body;
+
+	if (!title || title.trim() === "") {
+		return res.status(400).json({
+			error: "Title is required",
+		});
+	}
+	const newTask = {
+		id: nextID,
+		title,
+		done: false,
+	};
+
+	tasks.push(newTask);
+	
+	res.status(201).json(newTask);
+
+	// console.log();
+
 });
 
 app.listen(port, () => {
