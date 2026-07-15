@@ -1,4 +1,7 @@
+import swaggerUi from "swagger-ui-express";
+import fs from "fs";
 import express from "express";
+
 const app = express();
 const port = 3000;
 
@@ -119,8 +122,6 @@ app.put("/tasks/:id", (req, res) => {
 	res.json(tasks[index]);
 });
 
-
-
 app.delete("/tasks/:id", (req, res) => {
 	const id = Number(req.params.id);
 
@@ -136,6 +137,12 @@ app.delete("/tasks/:id", (req, res) => {
 
 	res.sendStatus(204);
 });
+
+const swaggerDocument = JSON.parse(
+	fs.readFileSync("./openapi.json", "utf8")
+);
+
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 
 app.listen(port, () => {
