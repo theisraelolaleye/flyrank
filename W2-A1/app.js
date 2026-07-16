@@ -138,12 +138,37 @@ app.delete("/tasks/:id", (req, res) => {
 	res.sendStatus(204);
 });
 
-const swaggerDocument = JSON.parse(
-	fs.readFileSync("./openapi.json", "utf8")
-);
+app.get("/tasks", (req, res) => {
+	const { done } = req.query;
+
+	if (done === undefined) {
+		return res.json(tasks);
+	}
+
+	const completed = done === "true";
+
+	const filteredTasks = tasks.filter((task) => task.done === completed);
+
+	res.json(filteredTasks);
+});
+
+app.get("/stats", (req, res) => {
+	const total = tasks.length;
+
+	const done = tasks.filter((task) => task.done).length;
+
+	const open = total - done;
+
+	res.json({
+		total,
+		done,
+		open,
+	});
+});
+
+const swaggerDocument = JSON.parse(fs.readFileSync("./openapi.json", "utf8"));
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-
 
 app.listen(port, () => {
 	console.log(`Example app listening on port ${port}`);
