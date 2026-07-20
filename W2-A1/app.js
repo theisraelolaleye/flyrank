@@ -1,30 +1,37 @@
+import Database from "better-sqlite3";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
+const db = new Database(path.join(__dirname, "tasks.db"));
 const port = 3000;
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY,
+    title TEXT,
+    done BOOLEAN
+);
+`);
+
+const { count } = db.prepare("SELECT COUNT(*) AS count FROM tasks").get();
+
+if (count === 0) {
+	const seed = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+	seed.run("Task 1", 1);
+	seed.run("Task 2", 1);
+	seed.run("Task 3", 0);
+}
+
+const toTask = (row) => ({ ...row, done: !!row.done });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-const tasks = [
-	{
-		id: 1,
-		title: "Task 1",
-		done: true,
-	},
-	{
-		id: 2,
-		title: "Task 2",
-		done: true,
-	},
-	{
-		id: 3,
-		title: "Task 3",
-		done: false,
-	},
-];
 
 app.get("/", (req, res) => {
 	res.json({
@@ -41,25 +48,33 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/tasks", (req, res) => {
-	res.json(tasks);
+	const { done } = req.query;
+
+	if (done === undefined) {
+		const rows = db.prepare("SELECT * FROM tasks").all();
+		return res.json(rows.map(toTask));
+	}
+
+	const completed = done === "true" ? 1 : 0;
+	const rows = db.prepare("SELECT * FROM tasks WHERE done = ?").all(completed);
+
+	res.json(rows.map(toTask));
 });
 
-app.get("/task/:id", (req, res) => {
+app.get("/tasks/:id", (req, res) => {
 	const id = Number(req.params.id);
-	const task = tasks.find((task) => task.id === id);
+	const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-	if (!task) {
+	if (!row) {
 		return res.status(404).json({
 			error: `Task ${id} not found`,
 		});
 	}
 
-	res.json(task);
-	// console.log(req.params);
+	res.json(toTask(row));
 });
 
 app.post("/tasks", (req, res) => {
-	const nextID = tasks.length + 1;
 	const { title } = req.body;
 
 	if (!title || title.trim() === "") {
@@ -67,25 +82,23 @@ app.post("/tasks", (req, res) => {
 			error: "Title is required",
 		});
 	}
-	const newTask = {
-		id: nextID,
+
+	const info = db
+		.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)")
+		.run(title, 0);
+
+	res.status(201).json({
+		id: info.lastInsertRowid,
 		title,
 		done: false,
-	};
-
-	tasks.push(newTask);
-
-	res.status(201).json(newTask);
-
-	// console.log();
+	});
 });
 
 app.put("/tasks/:id", (req, res) => {
 	const id = Number(req.params.id);
+	const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-	const index = tasks.findIndex((task) => task.id === id);
-
-	if (index === -1) {
+	if (!existing) {
 		return res.status(404).json({
 			error: `Task ${id} not found`,
 		});
@@ -111,62 +124,46 @@ app.put("/tasks/:id", (req, res) => {
 		});
 	}
 
-	if (title !== undefined) {
-		tasks[index].title = title;
-	}
+	db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(
+		title !== undefined ? title : existing.title,
+		done !== undefined ? (done ? 1 : 0) : existing.done,
+		id,
+	);
 
-	if (done !== undefined) {
-		tasks[index].done = done;
-	}
+	const updated = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-	res.json(tasks[index]);
+	res.json(toTask(updated));
 });
 
 app.delete("/tasks/:id", (req, res) => {
 	const id = Number(req.params.id);
+	const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
 
-	const index = tasks.findIndex((task) => task.id === id);
-
-	if (index === -1) {
+	if (info.changes === 0) {
 		return res.status(404).json({
 			error: `Task ${id} not found`,
 		});
 	}
 
-	tasks.splice(index, 1);
-
 	res.sendStatus(204);
 });
 
-app.get("/tasks", (req, res) => {
-	const { done } = req.query;
-
-	if (done === undefined) {
-		return res.json(tasks);
-	}
-
-	const completed = done === "true";
-
-	const filteredTasks = tasks.filter((task) => task.done === completed);
-
-	res.json(filteredTasks);
-});
-
 app.get("/stats", (req, res) => {
-	const total = tasks.length;
-
-	const done = tasks.filter((task) => task.done).length;
-
-	const open = total - done;
+	const { total } = db.prepare("SELECT COUNT(*) AS total FROM tasks").get();
+	const { done } = db
+		.prepare("SELECT COUNT(*) AS done FROM tasks WHERE done = 1")
+		.get();
 
 	res.json({
 		total,
 		done,
-		open,
+		open: total - done,
 	});
 });
 
-const swaggerDocument = JSON.parse(fs.readFileSync("./openapi.json", "utf8"));
+const swaggerDocument = JSON.parse(
+	fs.readFileSync(path.join(__dirname, "..", "openapi.json"), "utf8"),
+);
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
